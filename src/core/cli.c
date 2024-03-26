@@ -1,9 +1,17 @@
 #define OPTPARSE_IMPLEMENTATION
 #define OPTPARSE_API static
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
 #include "libs/optparse.h"
+#pragma GCC diagnostic pop
+
 #include "cli.h"
 #include <limits.h>
 #include <libgen.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 
 void handle_help();
 void handle_tools_help();
@@ -14,13 +22,14 @@ void handle_exp_delete(char *name);
 void handle_exp_info(char *name);
 void handle_sysinfo();
 
+void get_archiplex_root_dir(char *root_path);
 void launch_tool(const char *tool_name, char *const argv[]);
 
 void cli_main(int argc, char **argv) {
     struct optparse options;
     optparse_init(&options, argv);
     char *arg = optparse_arg(&options); // Skip program name
-
+    
     if (arg == NULL || strcmp(arg, "help") == 0) {
         handle_help();
     } else if (strcmp(arg, "tools") == 0) {
@@ -99,19 +108,135 @@ void handle_tools_help() {
 }
 
 void handle_exp_help() {
-    printf(COLOR_CYAN "Experimental Help:\n" COLOR_RESET);
+    printf("\n");
+    printf("  Usage: ");
+    printf("archiplex exp [options]\n\n");
+
+    printf("  General Commands:\n");
+    LOG_INFO("    help           ");
+    printf("Displays this help message.\n");
+
+    LOG_INFO("    list           ");
+    printf("Displays a list of registered experiments.\n");
+
+    LOG_INFO("    create         ");
+    printf("Launches an experiment creation wizard.\n");
+
+    LOG_INFO("    delete <name>  ");
+    printf("Deletes the specified experiment.\n");
+
+    LOG_INFO("    info   <name>  ");
+    printf("Displays information related to a specified experiment.\n\n");
 }
 
 void handle_exp_list() {
-    printf(COLOR_CYAN "Experiments list:\n" COLOR_RESET);
+    char root_path[PATH_MAX];
+    get_archiplex_root_dir(root_path);
+    
+    char experiments_path[PATH_MAX];
+    // Ensure that the path will not overflow, including extra space for the null terminator
+    if (strlen(root_path) + strlen("experiments/") + 1 > PATH_MAX) {
+        fprintf(stderr, "Path too long\n");
+        return;
+    }
+    
+    // Safely copy and concatenate paths
+    strncpy(experiments_path, root_path, PATH_MAX - 1);
+    experiments_path[PATH_MAX - 1] = '\0'; // Ensure null-termination
+    strncat(experiments_path, "experiments/", PATH_MAX - strlen(experiments_path) - 1);
+
+    DIR *d = opendir(experiments_path);
+    if (d) {
+        struct dirent *dir;
+        LOG_INFO("Registered experiments:\n");
+        while ((dir = readdir(d)) != NULL) {
+            if (dir->d_type == DT_DIR && strcmp(dir->d_name, ".") != 0 && strcmp(dir->d_name, "..") != 0) {
+                printf("  - %s\n", dir->d_name);
+            }
+        }
+        closedir(d);
+    } else {
+        perror("Failed to open experiments directory");
+    }
 }
 
 void handle_exp_create() {
-    printf(COLOR_CYAN "Prompt to create experiment:\n" COLOR_RESET);
+    char root_dir[PATH_MAX];
+    get_archiplex_root_dir(root_dir);
+
+    char codegen_script_path[PATH_MAX];
+    int needed = snprintf(codegen_script_path, sizeof(codegen_script_path), "%ssrc/codegen/codegen.py", root_dir);
+
+    if (needed >= sizeof(codegen_script_path)) {
+        fprintf(stderr, "Error: Path too long.\n");
+        return; // Exit the function if path is too long
+    }
+
+    // Fork a process to run the Python script
+    pid_t pid = fork();
+    if (pid == -1) {
+        // Fork failed
+        perror("fork");
+        return;
+    } else if (pid == 0) {
+        // Child process: Execute the codegen Python script
+        // Assuming Python executable is in the user's PATH
+        execlp("python3", "python3", codegen_script_path, NULL);
+
+        // If execlp returns, an error occurred
+        perror("execlp");
+        exit(EXIT_FAILURE);
+    } else {
+        // Parent process: Wait for the child to complete
+        int status;
+        waitpid(pid, &status, 0);
+    }
 }
 
 void handle_exp_delete(char *name) {
-    printf(COLOR_CYAN "Delete experiment '%s'\n" COLOR_RESET, name);
+    char root_dir[PATH_MAX];
+    get_archiplex_root_dir(root_dir);
+
+    char experiment_path[PATH_MAX];
+    int needed = snprintf(experiment_path, sizeof(experiment_path), "%sexperiments/%s", root_dir, name);
+    
+    if (needed >= sizeof(experiment_path)) {
+        fprintf(stderr, "Error: Path too long.\n");
+        return; // Exit the function if path is too long
+    }
+
+    // Confirm with the user
+    printf("Are you sure you want to delete the experiment '%s'? [y/N]: ", name);
+    int response = getchar();
+    if (response != 'y' && response != 'Y') {
+        printf("Deletion cancelled.\n");
+        return; // Do not proceed with deletion
+    }
+    
+    // Clear input buffer
+    while (getchar() != '\n');
+
+    // Check if the directory exists
+    struct stat statbuf;
+    if (stat(experiment_path, &statbuf) == -1 || !S_ISDIR(statbuf.st_mode)) {
+        perror("Experiment not found");
+        return;
+    }
+
+    // Use fork and exec pattern to call 'rm -rf'
+    pid_t pid = fork();
+    if (pid == 0) { // Child process
+        execl("/bin/rm", "rm", "-rf", experiment_path, NULL);
+        // If execl returns, an error occurred
+        perror("execl");
+        exit(1);
+    } else if (pid > 0) { // Parent process
+        int status;
+        waitpid(pid, &status, 0); // Wait for the child process to finish
+    } else {
+        // Fork failed
+        perror("fork");
+    }
 }
 
 void handle_exp_info(char *name) {
@@ -121,6 +246,20 @@ void handle_exp_info(char *name) {
 void handle_sysinfo() {
     char *argv[] = { "sysinfo.sh", NULL };
     launch_tool("sysinfo.sh", argv);
+}
+
+void get_archiplex_root_dir(char *root_path) {
+    char exec_path[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", exec_path, sizeof(exec_path) - 1);
+    if (len != -1) {
+        exec_path[len] = '\0'; // Ensure null-terminated string
+        char *dir = dirname(exec_path); // Get directory of the current executable
+        char *parent_dir = dirname(strdup(dir)); // Duplicate since dirname can modify the input
+        snprintf(root_path, PATH_MAX, "%s/", parent_dir); // Construct the root path
+    } else {
+        perror("Failed to resolve executable path");
+        exit(1); // Exiting as we can't proceed without the path
+    }
 }
 
 void launch_tool(const char *tool_name, char *const argv[]) {
