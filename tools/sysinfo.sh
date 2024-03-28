@@ -64,6 +64,9 @@ echo "---------------------"
 # Kernel version
 print_aligned "Kernel:" "$(uname -r)"
 
+# Boot arguments
+print_aligned "Boot args:" "$(cat /proc/cmdline)"
+
 # Kernel hash
 kernel_version=$(uname -r)
 print_aligned "Kernel Hash:" "$(md5sum /boot/vmlinuz-"$kernel_version" | awk '{print $1}')"
@@ -76,6 +79,9 @@ print_aligned "GLIBC:" "$(ldd --version | grep 'ldd' | awk '{print $NF}')"
 
 # Linker version
 extract_lib_version "Linker" "ld --version | head -n 1"
+
+# GCC version
+extract_lib_version "GCC" "gcc --version | head -n 1"
 
 # Commonly used shared libraries versions
 extract_lib_version "OpenSSL" "openssl version"
