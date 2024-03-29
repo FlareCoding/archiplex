@@ -2,11 +2,14 @@
 
 # Compiler settings
 CC := gcc
-CFLAGS := -Wall -Wextra $(OPTFLAGS)
+CFLAGS := -Wall -Wextra $(OPTFLAGS) $(EXPCONFIG)
 LDFLAGS := $(OPTFLAGS)
 
 # Optimization level, can be overridden by passing OPTFLAGS=-O2 etc. to make
-OPTFLAGS := -O0
+OPTFLAGS := -O2
+
+# Experiment configuration flags
+EXPCONFIG :=
 
 # Source and Object Directories
 SRC_DIR := src

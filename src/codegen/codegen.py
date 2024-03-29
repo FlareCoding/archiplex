@@ -47,9 +47,10 @@ def create_experiment_structure(base_path, measurements, custom_metrics):
     # Initialize the configuration with default settings and selected measurements
     config = ConfigParser()
     config['Settings'] = {
-        'EXPERIMENT_VERSION': '1.0.0',      # Default version
-        'EXPERIMENT_LOOP_COUNT': '100000',  # Default iteration count for the benchmark loop
+        'EXPERIMENT_VERSION': '1.0.0',       # Default version
+        'EXPERIMENT_LOOP_COUNT': '1000000',  # Default iteration count for the benchmark loop
         'EXPERIMENT_ITERATIONS': '30',
+        'EXPERIMENT_RUN_ID': '0',            # Trial run
     }
     config['Measurements'] = {k: str(v) for k, v in measurements.items()}
     if custom_metrics:
@@ -84,7 +85,7 @@ def main():
     }
 
     for measurement in measurements:
-        measurements[measurement] = Confirm.ask(f"Include {measurement}?")
+        measurements[measurement] = Confirm.ask(f"Include {measurement}?", default="y")
 
     # Custom Measurements
     custom_measurements = Prompt.ask("Enter any other custom metrics to include (space-separated)", default="")
