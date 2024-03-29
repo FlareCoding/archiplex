@@ -109,7 +109,7 @@ void benchmark() {
 #endif
 
 #ifdef CONFIG_MEASURE_LATENCIES
-    FILE* log = create_data_output_file("latencies");
+    FILE* log = create_data_output_file("latencies.csv");
     fprintf(log, "iteration,latency\n");
     for (int i = 0; i < EXPERIMENT_LOOP_COUNT; ++i) {
         uint64_t latency_measure = get_elapsed_ns(&runs[i]);
