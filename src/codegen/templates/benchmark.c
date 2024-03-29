@@ -5,19 +5,22 @@
 #include <stdint.h>
 #include <time.h>
 #include <unistd.h>
+#include <libgen.h>
 #include <limits.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <fcntl.h>
 #include <errno.h>
 
 #define CONFIG_PATH "../config/config.ini"
 
 // Global configuration variables
 char* EXPERIMENT_VERSION = NULL;
-int EXPERIMENT_LOOP_COUNT = 0;
-int EXPERIMENT_ITERATIONS = 0;
-int EXPERIMENT_RUN_ID = 0;
+int   EXPERIMENT_LOOP_COUNT = 0;
+int   EXPERIMENT_ITERATIONS = 0;
+int   EXPERIMENT_RUN_ID = 0;
+char* EXPERIMENT_CONFIGURATION_NAME = NULL;
 
 // Function prototypes
 char* trim_whitespace(char* str);
@@ -128,12 +131,14 @@ int main() {
     EXPERIMENT_LOOP_COUNT = get_config_int("experiment_loop_count");
     EXPERIMENT_ITERATIONS = get_config_int("experiment_iterations");
     EXPERIMENT_RUN_ID = get_config_int("experiment_run_id");
+    EXPERIMENT_CONFIGURATION_NAME = get_config_string("experiment_run_configuration");
     
     setup();
     benchmark();
     cleanup();
     
     free(EXPERIMENT_VERSION);
+    free(EXPERIMENT_CONFIGURATION_NAME);
     return 0;
 }
 
@@ -210,6 +215,8 @@ int get_config_bool(const char* key) {
     return 0; // Key not found or conversion error
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation="
 FILE* create_data_output_file(const char* filename) {
     char exe_path[PATH_MAX];
     ssize_t length = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
@@ -217,42 +224,44 @@ FILE* create_data_output_file(const char* filename) {
         perror("readlink");
         return NULL;
     }
-    exe_path[length] = '\0'; // Ensure null-termination
+    exe_path[length] = '\0';
 
-    // Find the last occurrence of '/' and terminate the string there
-    char* last_slash = strrchr(exe_path, '/');
-    if (last_slash == NULL) {
-        fprintf(stderr, "Error finding executable directory\n");
+    // Construct the initial part of the path to the data directory
+    char* dir = dirname(exe_path); // Get directory of the executable
+    char data_dir_path[PATH_MAX];
+    snprintf(data_dir_path, sizeof(data_dir_path), "%s/../data/raw/run_%d/%s",
+             dir, EXPERIMENT_RUN_ID,
+             EXPERIMENT_CONFIGURATION_NAME ? EXPERIMENT_CONFIGURATION_NAME : "default");
+
+    // Tokenize the path and create directories one by one
+    char* p = data_dir_path;
+    for (p += 1; *p; p++) { // Skip the leading character assuming it's part of the path
+        if (*p == '/') {
+            *p = '\0'; // Temporarily end the string here to isolate the current directory component
+            if (mkdir(data_dir_path, 0777) && errno != EEXIST) {
+                fprintf(stderr, "Failed to create directory '%s': %s\n", data_dir_path, strerror(errno));
+                return NULL;
+            }
+            *p = '/'; // Restore the slash to continue with the next directory component
+        }
+    }
+
+    // Ensure the final directory is created
+    if (mkdir(data_dir_path, 0777) && errno != EEXIST) {
+        fprintf(stderr, "Failed to create directory '%s': %s\n", data_dir_path, strerror(errno));
         return NULL;
     }
-    *last_slash = '\0'; // Cut off the executable name
 
-    char run_dir_path[PATH_MAX];
-    int needed = snprintf(run_dir_path, sizeof(run_dir_path), "%s/../data/raw/run_%d", exe_path, EXPERIMENT_RUN_ID);
-    if (needed >= (int)sizeof(run_dir_path)) {
-        fprintf(stderr, "Path is too long, truncation occurred\n");
-        return NULL;
-    }
-
-    // Attempt to create the directory if it doesn't exist
-    if (mkdir(run_dir_path, 0777) && errno != EEXIST) {
-        perror("mkdir");
-        return NULL;
-    }
-
+    // Construct the full file path and attempt to open the file for writing
     char file_path[PATH_MAX];
-    needed = snprintf(file_path, sizeof(file_path), "%s/%s", run_dir_path, filename);
-    if (needed >= (int)sizeof(file_path)) {
-        fprintf(stderr, "File path is too long, truncation occurred\n");
-        return NULL;
-    }
-
-    // Attempt to open the file for writing (or creating if it doesn't exist)
-    FILE* file = fopen(file_path, "w"); // Open for writing
-    if (file == NULL) {
+    snprintf(file_path, PATH_MAX, "%s/%s", data_dir_path, filename);
+    FILE* file = fopen(file_path, "w");
+    if (!file) {
         perror("fopen");
+        return NULL;
     }
 
     return file;
 }
+#pragma GCC diagnostic pop
 

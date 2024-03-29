@@ -32,15 +32,19 @@ def copy_templates_to_experiment(base_path):
     shutil.copy(benchmark_template, benchmark_destination)
     shutil.copy(makefile_template, makefile_destination)
 
-def create_run_script(base_path):
-    run_script_path = os.path.join(base_path, "scripts", "run.sh")
+def create_run_script(base_path, configuration):
+    run_script_path = os.path.join(base_path, "scripts", f"run_{configuration}.sh")
     with open(run_script_path, 'w') as run_script:
         run_script.write("""#!/bin/bash
 
 # Navigate to the experiment's root directory
-cd "$(dirname "$0")/../bin"
-        
+cd "$(dirname "$0")/.."
+
+make clean
+make EXPCONFIG=-DCONFIG_MEASURE_LATENCIES
+      
 # Run the compiled experiment binary
+cd bin
 ./benchmark
 """)
     # Make the script executable
@@ -54,10 +58,12 @@ def create_experiment_structure(base_path, measurements, custom_metrics):
     # Initialize the configuration with default settings and selected measurements
     config = ConfigParser()
     config['Settings'] = {
-        'EXPERIMENT_VERSION': '1.0.0',       # Default version
-        'EXPERIMENT_LOOP_COUNT': '1000000',  # Default iteration count for the benchmark loop
+        'EXPERIMENT_VERSION': '1.0.0',                       # Default version
+        'EXPERIMENT_LOOP_COUNT': '1000000',                  # Default iteration count for the benchmark loop
         'EXPERIMENT_ITERATIONS': '30',
-        'EXPERIMENT_RUN_ID': '0',            # Trial run
+        'EXPERIMENT_CONFIGURATIONS': 'baseline, optimized',
+        'EXPERIMENT_RUN_ID': '0',                            # Trial run
+        'EXPERIMENT_RUN_CONFIGURATION': 'baseline',          # Default configuration
     }
     config['Measurements'] = {k: str(v) for k, v in measurements.items()}
     if custom_metrics:
@@ -70,7 +76,8 @@ def create_experiment_structure(base_path, measurements, custom_metrics):
     copy_templates_to_experiment(base_path);
 
     # Create the run.sh script
-    create_run_script(base_path)
+    create_run_script(base_path, 'baseline')
+    create_run_script(base_path, 'optimized')
     
     console.print("Experiment setup complete!", style="bold blue")
     
