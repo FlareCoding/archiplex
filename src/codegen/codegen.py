@@ -4,22 +4,29 @@ from configparser import ConfigParser
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
 import os
+from pathlib import Path
 import shutil
 
 console = Console()
 
 def copy_templates_to_experiment(base_path):
-    templates_path = os.path.join("templates")  # Adjust as necessary
-    target_src_path = os.path.join(base_path, "src")
-    target_makefile_path = base_path  # Makefile is directly under the experiment dir
+    script_dir = Path(__file__).parent.absolute()
+    templates_path = script_dir.joinpath("templates").resolve()
+
+    target_src_path = Path(base_path).joinpath("src")
+    target_makefile_path = Path(base_path)  # Makefile is directly under the experiment dir
 
     # Paths of the template files
-    benchmark_template = os.path.join(templates_path, "benchmark.c")
-    makefile_template = os.path.join(templates_path, "Makefile")
+    benchmark_template = templates_path.joinpath("benchmark.c")
+    makefile_template = templates_path.joinpath("Makefile")
+
+    # Ensure target directories exist
+    target_src_path.mkdir(parents=True, exist_ok=True)
+    target_makefile_path.mkdir(parents=True, exist_ok=True)
 
     # Destination paths
-    benchmark_destination = os.path.join(target_src_path, "benchmark.c")
-    makefile_destination = os.path.join(target_makefile_path, "Makefile")
+    benchmark_destination = target_src_path.joinpath("benchmark.c")
+    makefile_destination = target_makefile_path.joinpath("Makefile")
 
     # Copying the template files to the target directory
     shutil.copy(benchmark_template, benchmark_destination)
@@ -71,10 +78,11 @@ def main():
     console.print("Welcome to the Archiplex Experiment Code Generator", style="bold green")
 
     experiment_name = Prompt.ask("Enter your experiment name")
-    # Assuming the script is run from the archiplex/src/codegen directory,
-    # adjust the path to correctly point to the experiments directory
-    experiment_path = os.path.join("..", "..", "experiments", experiment_name)
 
+    script_dir = Path(__file__).parent.absolute()
+    experiments_dir = script_dir.joinpath("..", "..", "experiments").resolve()
+    experiment_path = experiments_dir.joinpath(experiment_name)
+    
     # Measurement selection through yes/no prompts
     measurements = {
         "Overall_Throughput": False,
