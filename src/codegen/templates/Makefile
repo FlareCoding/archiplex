@@ -1,15 +1,15 @@
 .PHONY: build clean
 
-# Compiler settings
-CC := gcc
-CFLAGS := -Wall -Wextra $(OPTFLAGS) $(EXPCONFIG)
-LDFLAGS := $(OPTFLAGS)
-
 # Optimization level, can be overridden by passing OPTFLAGS=-O2 etc. to make
 OPTFLAGS := -O2
 
 # Experiment configuration flags
 EXPCONFIG :=
+
+# Compiler settings
+CC := gcc
+CFLAGS := -Wall -Wextra $(OPTFLAGS) $(EXPCONFIG)
+LDFLAGS := $(OPTFLAGS)
 
 # Source and Object Directories
 SRC_DIR := src

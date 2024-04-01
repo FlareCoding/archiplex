@@ -63,6 +63,54 @@ void cli_main(int argc, char **argv) {
             } else {
                 handle_exp_info(name);
             }
+        } else if (strcmp(arg, "run") == 0) {
+            char *path_to_experiment_dir = NULL;
+            char *config_name = "";
+            int verbose = 0; // Verbose flag
+
+            // Process further arguments to find optional parameters
+            while ((arg = optparse_arg(&options)) != NULL) {
+                if (strcmp(arg, "-c") == 0) { // Next argument is the config name
+                    config_name = optparse_arg(&options);
+                    if (config_name == NULL) {
+                        printf(COLOR_RED "Expected configuration name after '-c'.\n" COLOR_RESET);
+                        return;
+                    }
+                } else if (strcmp(arg, "-v") == 0) {
+                    verbose = 1;
+                } else if (strcmp(arg, "-vv") == 0) {
+                    verbose = 2;
+                } else {
+                    // Treat as the path if not a recognized option
+                    if (path_to_experiment_dir == NULL) {
+                        path_to_experiment_dir = arg;
+                    } else {
+                        // More than one path-like argument encountered
+                        printf(COLOR_RED "Unexpected argument: %s\n" COLOR_RESET, arg);
+                        return;
+                    }
+                }
+            }
+
+            // Default to current working directory if no path is provided
+            char cwd[PATH_MAX];
+            if (path_to_experiment_dir == NULL) {
+                if (getcwd(cwd, sizeof(cwd)) != NULL) {
+                    path_to_experiment_dir = cwd;
+                } else {
+                    perror("getcwd");
+                    return;
+                }
+            }
+
+            char *tool_args[] = {
+                "run_experiment.sh",
+                path_to_experiment_dir,
+                config_name,
+                (verbose == 2) ? "-vv" : (verbose ? "-v" : NULL),
+                NULL
+            };
+            launch_tool("run_experiment.sh", tool_args);
         } else {
             printf(COLOR_RED "Unknown exp command.\n" COLOR_RESET);
         }
@@ -94,6 +142,8 @@ void handle_help() {
     printf("Launch an experiment creation tool.\n");
     LOG_INFO("    exp delete <name> ");
     printf("Delete an experiment by name.\n");
+    LOG_INFO("    exp run [path] [-c <config>,<config2>,...] [-v] [-vv]\n");
+    printf("                      Runs the experiment in the current directory unless specifies otherwise.\n");
     LOG_INFO("    exp info <name>   ");
     printf("Display information about an experiment.\n\n");
 
@@ -113,19 +163,22 @@ void handle_exp_help() {
     printf("archiplex exp [options]\n\n");
 
     printf("  General Commands:\n");
-    LOG_INFO("    help           ");
+    LOG_INFO("    help                                         ");
     printf("Displays this help message.\n");
 
-    LOG_INFO("    list           ");
+    LOG_INFO("    list                                         ");
     printf("Displays a list of registered experiments.\n");
 
-    LOG_INFO("    create         ");
+    LOG_INFO("    create                                       ");
     printf("Launches an experiment creation wizard.\n");
 
-    LOG_INFO("    delete <name>  ");
+    LOG_INFO("    delete <name>                                ");
     printf("Deletes the specified experiment.\n");
 
-    LOG_INFO("    info   <name>  ");
+    LOG_INFO("    run [path] [-c <config>,<config2>,...] [-v]  ");
+    printf("Runs the experiment in the current directory unless specifies otherwise. Optionally can specify the configuratioin to run\n");
+
+    LOG_INFO("    info   <name>                                ");
     printf("Displays information related to a specified experiment.\n\n");
 }
 
