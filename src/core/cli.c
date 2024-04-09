@@ -13,6 +13,8 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 
+#define INSTALL_DIRECTORY "/usr/local"
+
 void handle_help();
 void handle_tools_help();
 void handle_exp_help();
@@ -218,7 +220,12 @@ void handle_exp_create() {
     get_archiplex_root_dir(root_dir);
 
     char codegen_script_path[PATH_MAX];
-    int needed = snprintf(codegen_script_path, sizeof(codegen_script_path), "%ssrc/codegen/codegen.py", root_dir);
+    int needed = 0;
+    if (strncmp(root_dir, INSTALL_DIRECTORY, strlen(INSTALL_DIRECTORY)) == 0) {
+        needed = snprintf(codegen_script_path, sizeof(codegen_script_path), "%s/codegen/codegen.py", root_dir);
+    } else {
+        needed = snprintf(codegen_script_path, sizeof(codegen_script_path), "%ssrc/codegen/codegen.py", root_dir);
+    }
 
     if (needed >= sizeof(codegen_script_path)) {
         fprintf(stderr, "Error: Path too long.\n");
@@ -308,7 +315,12 @@ void get_archiplex_root_dir(char *root_path) {
         exec_path[len] = '\0'; // Ensure null-terminated string
         char *dir = dirname(exec_path); // Get directory of the current executable
         char *parent_dir = dirname(strdup(dir)); // Duplicate since dirname can modify the input
-        snprintf(root_path, PATH_MAX, "%s/", parent_dir); // Construct the root path
+
+        if (strncmp(parent_dir, INSTALL_DIRECTORY, strlen(INSTALL_DIRECTORY)) == 0) {
+            snprintf(root_path, PATH_MAX, "%s/%s/", INSTALL_DIRECTORY, "share/archiplex");
+        } else {
+            snprintf(root_path, PATH_MAX, "%s/", parent_dir); // Construct the root path
+        }
     } else {
         perror("Failed to resolve executable path");
         exit(1); // Exiting as we can't proceed without the path
@@ -316,23 +328,20 @@ void get_archiplex_root_dir(char *root_path) {
 }
 
 void launch_tool(const char *tool_name, char *const argv[]) {
-    char exec_path[PATH_MAX];
-    ssize_t len = readlink("/proc/self/exe", exec_path, sizeof(exec_path) - 1);
-    if (len != -1) {
-        exec_path[len] = '\0'; // Ensure null-terminated string
-        char *dir = dirname(exec_path); // Get directory of the current executable
-        char *parent_dir = dirname(dir); // Assumes executable is in archiplex/bin/
-        
-        char tool_path[PATH_MAX];
-        snprintf(tool_path, sizeof(tool_path), "%s/tools/%s", parent_dir, tool_name); // Construct tool path
-        
-        // Execute the tool
-        execv(tool_path, argv);
-        
-        // If execv returns, there was an error
-        perror("Failed to execute tool");
-    } else {
-        perror("Failed to resolve executable path");
+    char root_dir[PATH_MAX];
+    get_archiplex_root_dir(root_dir);
+
+    char tool_path[PATH_MAX] = { 0 };
+    int res = snprintf(tool_path, sizeof(tool_path), "%stools/%s", root_dir, tool_name); // Construct tool path
+    if (res >= sizeof(tool_path)) {
+        fprintf(stderr, "Error: Path too long.\n");
+        return;
     }
+    
+    // Execute the tool
+    execv(tool_path, argv);
+    
+    // If execv returns, there was an error
+    perror("Failed to execute tool");
 }
 

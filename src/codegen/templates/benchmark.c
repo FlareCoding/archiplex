@@ -16,11 +16,13 @@
 #define CONFIG_PATH "../config/config.ini"
 
 // Global configuration variables
-char* EXPERIMENT_VERSION = NULL;
-int   EXPERIMENT_LOOP_COUNT = 0;
-int   EXPERIMENT_ITERATIONS = 0;
-int   EXPERIMENT_RUN_ID = 0;
-char* EXPERIMENT_CONFIGURATION_NAME = NULL;
+char*  EXPERIMENT_VERSION = NULL;
+int    EXPERIMENT_LOOP_COUNT = 0;
+int    EXPERIMENT_WORK_MIN_SIZE = 0;
+int    EXPERIMENT_WORK_MAX_SIZE = 0;
+int    EXPERIMENT_WORK_SIZE_STEP = 0;
+int    EXPERIMENT_RUN_ID = 0;
+char*  EXPERIMENT_CONFIGURATION_NAME = NULL;
 
 // Function prototypes
 char* trim_whitespace(char* str);
@@ -74,54 +76,65 @@ static inline __attribute__((always_inline)) void benchmark_function() {
 }
 
 void benchmark() {
-    struct timer *runs = mmap(NULL, sizeof(struct timer) * EXPERIMENT_LOOP_COUNT, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    memset(runs, 0, sizeof(struct timer) * EXPERIMENT_LOOP_COUNT);
-
-    struct timespec prefault_ts;
-    clock_gettime(CLOCK_MONOTONIC, &prefault_ts); // Prefault clock_gettime memory
-    (void)prefault_ts;
-    
-    // Warmup phase
-    for (int i = 0; i < (int)(EXPERIMENT_LOOP_COUNT * 0.01); ++i) {
-        benchmark_function();
-    }
-    
-    // Actual benchmark phase
-    struct timer outer_timer;
-    timer_start(&outer_timer);
-    
-    for (int i = 0; i < EXPERIMENT_LOOP_COUNT; ++i) {
-#ifdef CONFIG_MEASURE_LATENCIES
-        timer_start(&runs[i]);
-#endif
-        benchmark_function();
-
-#ifdef CONFIG_MEASURE_LATENCIES
-        timer_stop(&runs[i]);
-#endif
-    }
-
-    timer_stop(&outer_timer);
-
-#ifdef CONFIG_MEASURE_THROUGHPUT
-    uint64_t elapsed_time = get_elapsed_ns(&outer_timer);
-    
-    printf("Total elapsed time  : %ld\n", elapsed_time);
-    printf("Total iterations    : %d\n", EXPERIMENT_LOOP_COUNT);
-    printf("Throughput          : %f iterations per second\n", EXPERIMENT_LOOP_COUNT / (elapsed_time / 1e9));
-#endif
-
-#ifdef CONFIG_MEASURE_LATENCIES
+#ifdef CONFIG_MEASURE_LATENCY
     FILE* log = create_data_output_file("latencies.csv");
-    fprintf(log, "iteration,latency\n");
-    for (int i = 0; i < EXPERIMENT_LOOP_COUNT; ++i) {
-        uint64_t latency_measure = get_elapsed_ns(&runs[i]);
-        fprintf(log, "%i,%ld\n", i, latency_measure);
+    fprintf(log, "iteration,latency,work_size\n");
+#endif
+
+    for (int work_size = EXPERIMENT_WORK_MIN_SIZE; work_size <= EXPERIMENT_WORK_MAX_SIZE; work_size += EXPERIMENT_WORK_SIZE_STEP) {
+        struct timer *runs = mmap(NULL, sizeof(struct timer) * EXPERIMENT_LOOP_COUNT, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        memset(runs, 0, sizeof(struct timer) * EXPERIMENT_LOOP_COUNT);
+
+        // Pre-warming the runtime environment only once
+        if (work_size == EXPERIMENT_WORK_MIN_SIZE) {
+            struct timespec prefault_ts;
+            clock_gettime(CLOCK_MONOTONIC, &prefault_ts); // Prefault clock_gettime memory
+            (void)prefault_ts;
+            
+            // Warmup phase
+            for (int i = 0; i < (int)(EXPERIMENT_LOOP_COUNT * 0.01); ++i) {
+                benchmark_function();
+            }
+        }
+        
+        // Actual benchmark phase
+        struct timer outer_timer;
+        timer_start(&outer_timer);
+        
+        for (int i = 0; i < EXPERIMENT_LOOP_COUNT; ++i) {
+    #ifdef CONFIG_MEASURE_LATENCY
+            timer_start(&runs[i]);
+    #endif
+            benchmark_function();
+
+    #ifdef CONFIG_MEASURE_LATENCY
+            timer_stop(&runs[i]);
+    #endif
+        }
+
+        timer_stop(&outer_timer);
+
+    #ifdef CONFIG_MEASURE_THROUGHPUT
+        uint64_t elapsed_time = get_elapsed_ns(&outer_timer);
+        
+        printf("Total elapsed time  : %ld\n", elapsed_time);
+        printf("Total iterations    : %d\n", EXPERIMENT_LOOP_COUNT);
+        printf("Throughput          : %f iterations per second\n", EXPERIMENT_LOOP_COUNT / (elapsed_time / 1e9));
+    #endif
+
+    #ifdef CONFIG_MEASURE_LATENCY
+        for (int i = 0; i < EXPERIMENT_LOOP_COUNT; ++i) {
+            uint64_t latency_measure = get_elapsed_ns(&runs[i]);
+            fprintf(log, "%i,%ld,%i\n", i, latency_measure, work_size);
+        }
+    #endif
+        
+        munmap(runs, sizeof(struct timer) * EXPERIMENT_LOOP_COUNT);
     }
+
+#ifdef CONFIG_MEASURE_LATENCY
     fclose(log);
 #endif
-    
-    munmap(runs, sizeof(struct timer) * EXPERIMENT_LOOP_COUNT);
 }
 
 int main() {
@@ -129,7 +142,9 @@ int main() {
     
     EXPERIMENT_VERSION = get_config_string("experiment_version");
     EXPERIMENT_LOOP_COUNT = get_config_int("experiment_loop_count");
-    EXPERIMENT_ITERATIONS = get_config_int("experiment_iterations");
+    EXPERIMENT_WORK_MIN_SIZE = get_config_int("experiment_work_min_size");
+    EXPERIMENT_WORK_MAX_SIZE = get_config_int("experiment_work_max_size");
+    EXPERIMENT_WORK_SIZE_STEP = get_config_int("experiment_work_size_step");
     EXPERIMENT_RUN_ID = get_config_int("experiment_run_id");
     EXPERIMENT_CONFIGURATION_NAME = get_config_string("experiment_run_configuration");
     
