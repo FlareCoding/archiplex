@@ -112,7 +112,12 @@ def main():
     experiment_name = Prompt.ask("Enter your experiment name")
 
     script_dir = Path(__file__).parent.absolute()
-    experiments_dir = script_dir.joinpath("..", "..", "experiments").resolve()
+
+    if str(script_dir).startswith("/usr/local/share"):
+        experiments_dir = Path(os.path.expanduser("~")).joinpath("experiments")
+    else:
+        experiments_dir = script_dir.joinpath("..", "..", "experiments").resolve()
+
     experiment_path = experiments_dir.joinpath(experiment_name)
     
     # Measurement selection through yes/no prompts

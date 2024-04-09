@@ -1,3 +1,5 @@
+USER_HOME := $(shell getent passwd $(shell logname) | cut -d: -f6)
+
 CC=gcc
 CFLAGS=-I. -Wall
 
@@ -39,8 +41,14 @@ install:
 	install -m 755 $(BINDIR)/$(TARGET) $(INSTALL_BIN_DIR)
 	install -d $(INSTALL_SHARE_DIR)/tools
 	install -d $(INSTALL_SHARE_DIR)/codegen
+	install -d $(INSTALL_SHARE_DIR)/config
+
 	cp -r $(ROOTDIR)/tools $(INSTALL_SHARE_DIR)
 	cp -r $(ROOTDIR)/src/codegen $(INSTALL_SHARE_DIR)
+	cp -r $(ROOTDIR)/config $(INSTALL_SHARE_DIR)
+
+	mkdir -p $(USER_HOME)/experiments
+	chmod -R o+rw $(USER_HOME)/experiments
 
 uninstall:
 	@if [ $$(id -u) -ne 0 ]; then \
@@ -50,6 +58,7 @@ uninstall:
 
 	rm -rf $(INSTALL_BIN_DIR)/$(TARGET)
 	rm -rf $(INSTALL_SHARE_DIR)
+	rm -rf $(USER_HOME)/experiments
 
 clean:
 	rm -rf $(OBJDIR) $(BINDIR)

@@ -25,6 +25,7 @@ void handle_exp_info(char *name);
 void handle_sysinfo();
 
 void get_archiplex_root_dir(char *root_path);
+void get_archiplex_experiments_dir(char *dir);
 void launch_tool(const char *tool_name, char *const argv[]);
 
 void cli_main(int argc, char **argv) {
@@ -185,20 +186,8 @@ void handle_exp_help() {
 }
 
 void handle_exp_list() {
-    char root_path[PATH_MAX];
-    get_archiplex_root_dir(root_path);
-    
     char experiments_path[PATH_MAX];
-    // Ensure that the path will not overflow, including extra space for the null terminator
-    if (strlen(root_path) + strlen("experiments/") + 1 > PATH_MAX) {
-        fprintf(stderr, "Path too long\n");
-        return;
-    }
-    
-    // Safely copy and concatenate paths
-    strncpy(experiments_path, root_path, PATH_MAX - 1);
-    experiments_path[PATH_MAX - 1] = '\0'; // Ensure null-termination
-    strncat(experiments_path, "experiments/", PATH_MAX - strlen(experiments_path) - 1);
+    get_archiplex_experiments_dir(experiments_path);
 
     DIR *d = opendir(experiments_path);
     if (d) {
@@ -254,11 +243,11 @@ void handle_exp_create() {
 }
 
 void handle_exp_delete(char *name) {
-    char root_dir[PATH_MAX];
-    get_archiplex_root_dir(root_dir);
+    char experiments_dir[PATH_MAX];
+    get_archiplex_experiments_dir(experiments_dir);
 
     char experiment_path[PATH_MAX];
-    int needed = snprintf(experiment_path, sizeof(experiment_path), "%sexperiments/%s", root_dir, name);
+    int needed = snprintf(experiment_path, sizeof(experiment_path), "%s/%s", experiments_dir, name);
     
     if (needed >= sizeof(experiment_path)) {
         fprintf(stderr, "Error: Path too long.\n");
@@ -324,6 +313,35 @@ void get_archiplex_root_dir(char *root_path) {
     } else {
         perror("Failed to resolve executable path");
         exit(1); // Exiting as we can't proceed without the path
+    }
+}
+
+void get_archiplex_experiments_dir(char *dir) {
+    char exec_path[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", exec_path, sizeof(exec_path) - 1);
+    if (len == -1) {
+        perror("Failed to resolve executable path");
+        exit(1); // Exiting as we can't proceed without the path
+    }
+        
+    exec_path[len] = '\0'; // Ensure null-terminated string
+    char *exec_dir = dirname(exec_path); // Get directory of the current executable
+    char *parent_dir = dirname(strdup(exec_dir)); // Duplicate since dirname can modify the input
+
+    if (strncmp(parent_dir, INSTALL_DIRECTORY, strlen(INSTALL_DIRECTORY)) == 0) {
+        // Get the HOME environment variable to find the user's home directory
+        const char *home = getenv("HOME");
+        if (home != NULL) {
+            // Ensure that the path to "/experiments" will not overflow the buffer
+            // Assuming `dir` has enough space allocated for this purpose
+            snprintf(dir, PATH_MAX, "%s/experiments", home);
+        } else {
+            // Fallback if HOME is not set (unlikely in a normal user environment)
+            fprintf(stderr, "Error: HOME environment variable is not set.\n");
+            exit(1);
+        }
+    } else {
+        snprintf(dir, PATH_MAX, "%s/experiments", parent_dir);
     }
 }
 
