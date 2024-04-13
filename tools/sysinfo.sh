@@ -45,6 +45,34 @@ print_aligned "Memory:" "$(free -h | grep 'Mem' | awk '{print $2 " total"}')"
 # Disk information
 print_aligned "Disk:" "$(lsblk | grep 'disk' | awk '{print $1, $4}' | tr '\n' ', ' | sed 's/, $//')"
 
+# Turbo Boost
+if [ -f /sys/devices/system/cpu/intel_pstate/no_turbo ]; then
+    no_turbo=$(cat /sys/devices/system/cpu/intel_pstate/no_turbo)
+    if [ "$no_turbo" -eq 0 ]; then
+        print_aligned "Turbo Boost:" "Enabled"
+    else
+        print_aligned "Turbo Boost:" "Disabled"
+    fi
+elif [ -f /sys/devices/system/cpu/cpufreq/boost ]; then
+    boost=$(cat /sys/devices/system/cpu/cpufreq/boost)
+    if [ "$boost" -eq 1 ]; then
+        print_aligned "Turbo Boost:" "Enabled"
+    else
+        print_aligned "Turbo Boost:" "Disabled"
+    fi
+else
+    print_aligned "Turbo Boost:" "Not Supported"
+fi
+
+# Hyper-Threading
+physical_cores=$(lscpu | grep "^Core(s) per socket:" | awk '{print $4}')
+logical_processors=$(lscpu | grep "^CPU(s):" | awk '{print $2}')
+if [ "$logical_processors" -gt "$physical_cores" ]; then
+    print_aligned "Hyper-Threading:" "Enabled"
+else
+    print_aligned "Hyper-Threading:" "Disabled"
+fi
+
 # Network adapters and speeds
 echo "Network Interfaces and Speeds:"
 for iface in $(ls /sys/class/net/ | grep -v lo); do
